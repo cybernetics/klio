@@ -72,6 +72,13 @@ def mock_docker_client(mocker):
 
 
 @pytest.fixture
+def mock_effective_config_file(mocker):
+    mock = mocker.Mock()
+    mock.name = "test-config"
+    return mock
+
+
+@pytest.fixture
 def base_pipeline(
     klio_config,
     docker_runtime_config,
@@ -108,6 +115,10 @@ def expected_volumes():
             "mode": "rw",
         },
         "/test/dir/jobs/test_run_job": {"bind": "/usr/src/app", "mode": "rw"},
+        "test-config": {
+            "bind": base.BaseDockerizedPipeline.MATERIALIZED_CONFIG_PATH,
+            "mode": "rw",
+        },
     }
 
 
@@ -136,7 +147,16 @@ def test_get_environment(base_pipeline, expected_envs):
     assert expected_envs == base_pipeline._get_environment()
 
 
-def test_get_volumes(base_pipeline, expected_volumes):
+def test_get_volumes(
+    base_pipeline,
+    expected_volumes,
+    mocker,
+    monkeypatch,
+    mock_effective_config_file,
+):
+    monkeypatch.setattr(
+        base_pipeline, "effective_config_file", mock_effective_config_file
+    )
     assert expected_volumes == base_pipeline._get_volumes()
 
 
@@ -150,6 +170,8 @@ def test_get_docker_runflags(
 ):
     mock_get_command = mocker.Mock(return_value=["command"])
     monkeypatch.setattr(base_pipeline, "_get_command", mock_get_command)
+
+    expected_volumes.pop("test-config")
 
     exp_runflags = {
         "image": "test-image:foo-123",
